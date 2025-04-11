@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\StickyNoteController;
 use App\Http\Controllers\SharedContentController;
+use App\Http\Controllers\XPostController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome');
@@ -23,6 +24,23 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Shared Content Routes
     Route::post('/shared-content', [SharedContentController::class, 'store'])->name('shared-content.store');
     Route::delete('/shared-content/{slug}', [SharedContentController::class, 'destroy'])->name('shared-content.destroy');
+
+    // X Post routes
+    Route::prefix('x-post')->name('x-post.')->group(function () {
+        Route::get('/', [XPostController::class, 'index'])->name('index');
+        Route::put('/', [XPostController::class, 'update'])->name('update');
+        
+        // Context management routes
+        Route::post('/contexts', [XPostController::class, 'storeContext'])->name('contexts.store');
+        Route::put('/contexts/{context}', [XPostController::class, 'updateContext'])->name('contexts.update');
+        Route::delete('/contexts/{context}', [XPostController::class, 'destroyContext'])->name('contexts.destroy');
+        
+        // Tweet management routes
+        Route::post('/generate', [XPostController::class, 'generateTweet'])->name('generate');
+        Route::get('/tweets', [XPostController::class, 'listTweets'])->name('tweets');
+        Route::post('/tweets/{tweet}/mark-sent', [XPostController::class, 'markAsSent'])->name('tweets.mark-sent');
+        Route::delete('/tweets/{tweet}', [XPostController::class, 'destroy'])->name('tweets.destroy');
+    });
 });
 
 // Public route for shared content
