@@ -16,11 +16,13 @@ class XPostSettings extends Model
         'profile_name',
         'about_me',
         'personality',
-        'max_tweet_length'
+        'max_tweet_length',
+        'x_post_job_queued'
     ];
 
     protected $casts = [
-        'max_tweet_length' => 'integer'
+        'max_tweet_length' => 'integer',
+        'x_post_job_queued' => 'boolean'
     ];
 
     public function tweets(): HasMany

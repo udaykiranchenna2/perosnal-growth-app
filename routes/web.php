@@ -40,6 +40,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/tweets', [XPostController::class, 'listTweets'])->name('tweets');
         Route::post('/tweets/{tweet}/mark-sent', [XPostController::class, 'markAsSent'])->name('tweets.mark-sent');
         Route::delete('/tweets/{tweet}', [XPostController::class, 'destroy'])->name('tweets.destroy');
+        Route::get('/check-generation-status', [XPostController::class, 'checkGenerationStatus'])->name('check-generation-status');
     });
 });
 

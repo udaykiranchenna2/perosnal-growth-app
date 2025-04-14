@@ -36,12 +36,12 @@ class XPostController extends Controller
             'profile_name' => 'required|string|max:255',
             'about_me' => 'required|string',
             'personality' => 'required|string',
-            'max_tweet_length' => 'required|integer|min:1|max:280'
+            'max_tweet_length' => 'required|integer|min:1|max:1200'
         ]);
 
         $settings->update($validated);
 
-        return redirect()->back()->with('success', 'Settings updated successfully.');
+        return to_route('x-post.index', status: 303)->with('success', 'Settings updated successfully.');
     }
 
     public function storeContext(Request $request)
@@ -69,37 +69,39 @@ class XPostController extends Controller
 
         $context->update($validated);
 
-        return redirect()->back()->with('success', 'Context updated successfully.');
+        return to_route('x-post.index', status: 303)->with('success', 'Context updated successfully.');
     }
 
     public function destroyContext(TweetContext $context)
     {
         $context->delete();
-        return redirect()->back()->with('success', 'Context deleted successfully.');
+
+        return to_route('x-post.index', status: 303)->with('success', 'Context deleted successfully.');
     }
 
     public function generateTweet(Request $request)
     {
         $settings = XPostSettings::getProfile();
-        
+
         $validated = $request->validate([
-            'context_id' => 'required|exists:tweet_contexts,id'
+            'context_id' => 'required|exists:tweet_contexts,id',
+            'instructions' => 'required|string',
         ]);
 
         $context = TweetContext::find($validated['context_id']);
-        GenerateTweetJob::dispatch($settings, $context);
+        GenerateTweetJob::dispatch($settings, $context, $validated['instructions']);
 
         if ($request->wantsJson()) {
             return response()->json(['message' => 'Tweet generation job has been queued.']);
         }
 
-        return redirect()->back()->with('success', 'Tweet generation job has been queued.');
+        return to_route('x-post.index', status: 303)->with('success', 'Tweet generation job has been queued.');
     }
 
-    public function listTweets()
+    public function listTweets(Request $request)
     {
         $settings = XPostSettings::getProfile();
-        $tweets = $settings->tweets()->latest()->get();
+        $tweets = $settings->tweets()->latest()->paginate($request->input('per_page', 10));
         return Inertia::render('XPost/Tweets', [
             'tweets' => $tweets,
             'settings' => $settings
@@ -109,6 +111,8 @@ class XPostController extends Controller
     public function markAsSent(GeneratedTweet $tweet, TwitterService $twitterService)
     {
         try {
+
+
             // Post the tweet to Twitter
             $result = $twitterService->postTweet($tweet->content);
 
@@ -120,17 +124,23 @@ class XPostController extends Controller
                     'tweet_id' => $result['tweet_id']
                 ]);
 
-                return back()->with('success', 'Tweet posted successfully!');
+                return to_route('x-post.tweets', status: 303)->with('flash',
+                ['status' => true, 'message' => 'Tweet sent successfully']
+            );
             }
 
-            return back()->with('error', 'Failed to post tweet: ' . ($result['error'] ?? 'Unknown error'));
+
+            return to_route('x-post.tweets', status: 303)->with('error', 'Failed to send tweet.');
         } catch (\Exception $e) {
             Log::error('Failed to post tweet', [
                 'error' => $e->getMessage(),
                 'tweet_id' => $tweet->id
             ]);
 
-            return back()->with('error', 'Failed to post tweet: ' . $e->getMessage());
+            return to_route('x-post.tweets', status: 303)->with( 'flash' , [
+                'status' => false,
+                'message' => $e->getMessage()
+            ]);
         }
     }
 
@@ -142,13 +152,27 @@ class XPostController extends Controller
                 $this->twitterService->deleteTweet($tweet->tweet_id);
             }
             $tweet->delete();
-            return redirect()->back()->with('success', 'Tweet deleted successfully.');
+            return to_route('x-post.tweets', status: 303)->with('flash',
+                ['status' => true, 'message' => 'Tweet deleted successfully']
+            );
         } catch (\Exception $e) {
             \Log::error('Failed to delete tweet', [
                 'error' => $e->getMessage(),
                 'tweet_id' => $tweet->id
             ]);
-            return redirect()->back()->with('error', 'Failed to delete tweet. Please try again later.');
+
+            return to_route('x-post.tweets', status: 303)->with( 'flash' , [
+                'status' => false,
+                'message' => $e->getMessage()
+            ]);
         }
+    }
+
+    public function checkGenerationStatus()
+    {
+        $settings = XPostSettings::getProfile();
+        return response()->json([
+            'is_queued' => $settings->x_post_job_queued
+        ]);
     }
 }

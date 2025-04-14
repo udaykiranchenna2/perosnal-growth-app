@@ -16,13 +16,7 @@
             <div class="p-6">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-lg font-medium">Profile Settings</h3>
-                <button
-                  type="submit"
-                  class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
-                  @click="submitForm"
-                >
-                  Update Profile
-                </button>
+
               </div>
 
               <form @submit.prevent="submitForm" class="space-y-4">
@@ -69,6 +63,11 @@
                   >
                   <p v-if="form.errors.max_tweet_length" class="text-sm text-destructive">{{ form.errors.max_tweet_length }}</p>
                 </div>
+                <button
+                  class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2"
+                >
+                  Update Profile
+                </button>
               </form>
             </div>
           </div>
@@ -189,12 +188,31 @@
                       {{ context.name }}
                     </option>
                   </select>
+                  <p v-if="generateForm.errors.context_id" class="text-sm text-destructive">{{ generateForm.errors.context_id }}</p>
+                </div>
+                <div class="space-y-2">
+                  <label for="prompt" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Prompt</label>
+                  <input
+                      type="text"
+                      id="context_name"
+                      v-model="generateForm.instructions"
+                      class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                  <p v-if="generateForm.errors.instructions" class="text-sm text-destructive">{{ generateForm.errors.instructions }}</p>
                 </div>
                 <button
                   type="submit"
-                  class="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-blue-500 text-white hover:bg-blue-600 h-10 px-4 py-2"
+                  class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                  :disabled="isGenerating"
                 >
-                  Generate Tweet
+                  <span v-if="isGenerating">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </span>
+                  <span v-else>Generate Tweet</span>
                 </button>
               </form>
             </div>
@@ -207,8 +225,10 @@
   <script setup>
   import AppLayout from '@/layouts/AppLayout.vue';
   import { Link, useForm } from '@inertiajs/vue3';
-  import { ref } from 'vue';
-
+  import { ref, onUnmounted, onMounted } from 'vue';
+  import axios from 'axios';
+  import { useToast } from "vue-toastification";
+  const toast = useToast();
   const props = defineProps({
     settings: {
       type: Object,
@@ -231,13 +251,52 @@
     context: '',
     is_default: false
   });
+  const getDefaultContext = () => {
+    const defaultContext = props.settings.contexts.find((context) => context.is_default);
 
+    return defaultContext?.id ;
+  }
   const generateForm = useForm({
-    context_id: props.settings.defaultContext?.id || ''
+    context_id: getDefaultContext(),
+    instructions: ''
   });
 
+  const isGenerating = ref(false);
+  const pollingInterval = ref(null);
+
+  const startPolling = () => {
+    pollingInterval.value = setInterval(async () => {
+      try {
+        const response = await axios.get(route('x-post.check-generation-status'));
+
+        if (!response.data.is_queued) {
+          clearInterval(pollingInterval.value);
+          isGenerating.value = false;
+          toast.success("Tweet generated successfully", {
+            timeout: 2000
+          });
+          // Refresh the page to show the new tweet
+        }
+      } catch (error) {
+        // Handle error
+        toast.error("Failed to generate tweet", {
+          timeout: 2000
+        })
+        console.error('Error checking generation status:', error);
+        clearInterval(pollingInterval.value);
+        isGenerating.value = false;
+      }
+    }, 5000); // Poll every 5 seconds
+  };
+
   const submitForm = () => {
-    form.put(route('x-post.update'));
+    form.put(route('x-post.update'), {
+      onSuccess: () => {
+        toast.success("Settings updated successfully", {
+        timeout: 2000
+      });
+      }
+    });
   };
 
   const submitContextForm = () => {
@@ -247,18 +306,30 @@
           showNewContextForm.value = false;
           editingContext.value = null;
           contextForm.reset();
+          toast.success("Context updated successfully", {
+            timeout: 2000
+          })
         },
         onError: (errors) => {
+            toast.error("Failed to update context", {
+              timeout: 2000
+            })
           console.error('Error updating context:', errors);
         }
       });
     } else {
       contextForm.post(route('x-post.contexts.store'), {
         onSuccess: () => {
+          toast.success("Context created successfully", {
+            timeout: 2000
+          })
           showNewContextForm.value = false;
           contextForm.reset();
         },
         onError: (errors) => {
+            toast.error("Failed to create context", {
+              timeout: 2000
+            })
           console.error('Error creating context:', errors);
         }
       });
@@ -293,6 +364,28 @@
   };
 
   const generateTweet = () => {
-    generateForm.post(route('x-post.generate'));
+    if (isGenerating.value) return;
+
+    isGenerating.value = true;
+    generateForm.post(route('x-post.generate'), {
+      onSuccess: () => {
+        startPolling();
+      },
+      onError: () => {
+        isGenerating.value = false;
+      }
+    });
   };
+  onMounted(() => {
+      isGenerating.value = props.settings.x_post_job_queued;
+      if(isGenerating.value){
+        startPolling();
+      }
+  })
+  // Clean up polling interval when component is unmounted
+  onUnmounted(() => {
+    if (pollingInterval.value) {
+      clearInterval(pollingInterval.value);
+    }
+  });
   </script>
