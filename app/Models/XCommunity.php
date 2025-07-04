@@ -6,31 +6,24 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class GeneratedTweet extends Model
+class XCommunity extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'x_post_settings_id',
-        'x_community_id',
-        'content',
-        'is_sent',
-        'sent_at',
-        'tweet_id'
+        'name',
+        'community_id',
+        'description',
+        'is_active'
     ];
 
     protected $casts = [
-        'is_sent' => 'boolean',
-        'sent_at' => 'datetime'
+        'is_active' => 'boolean'
     ];
 
     public function settings(): BelongsTo
     {
         return $this->belongsTo(XPostSettings::class, 'x_post_settings_id');
     }
-
-    public function community(): BelongsTo
-    {
-        return $this->belongsTo(XCommunity::class, 'x_community_id');
-    }
-} 
+}

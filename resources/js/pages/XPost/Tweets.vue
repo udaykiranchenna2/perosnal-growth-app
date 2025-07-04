@@ -16,6 +16,7 @@
             <TableHeader>
               <TableRow>
                 <TableHead>Content</TableHead>
+                <TableHead>Community</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead class="text-right">Actions</TableHead>
@@ -24,6 +25,12 @@
             <TableBody>
               <TableRow v-for="tweet in tweets.data" :key="tweet.id">
                 <TableCell>{{ tweet.content }}</TableCell>
+                <TableCell>
+                  <span v-if="tweet.community" class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-blue-100 text-blue-800">
+                    {{ tweet.community.name }}
+                  </span>
+                  <span v-else class="text-sm text-muted-foreground">No Community</span>
+                </TableCell>
                 <TableCell>
                   <span :class="[
                     tweet.is_sent ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800',

@@ -35,6 +35,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/contexts/{context}', [XPostController::class, 'updateContext'])->name('contexts.update');
         Route::delete('/contexts/{context}', [XPostController::class, 'destroyContext'])->name('contexts.destroy');
         
+        // Community management routes
+        Route::post('/communities', [XPostController::class, 'storeCommunity'])->name('communities.store');
+        Route::put('/communities/{community}', [XPostController::class, 'updateCommunity'])->name('communities.update');
+        Route::delete('/communities/{community}', [XPostController::class, 'destroyCommunity'])->name('communities.destroy');
+        
         // Tweet management routes
         Route::post('/generate', [XPostController::class, 'generateTweet'])->name('generate');
         Route::get('/tweets', [XPostController::class, 'listTweets'])->name('tweets');

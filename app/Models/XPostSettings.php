@@ -35,6 +35,11 @@ class XPostSettings extends Model
         return $this->hasMany(TweetContext::class, 'x_post_settings_id');
     }
 
+    public function communities(): HasMany
+    {
+        return $this->hasMany(XCommunity::class, 'x_post_settings_id');
+    }
+
     public function defaultContext()
     {
         return $this->contexts()->where('is_default', true)->first();

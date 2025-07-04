@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\XPostSettings;
 use App\Models\GeneratedTweet;
 use App\Models\TweetContext;
+use App\Models\XCommunity;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -20,13 +21,14 @@ class GenerateTweetJob implements ShouldQueue
     protected $settings;
     protected $context;
     protected $instructions;
+    protected $community;
 
-    public function __construct(XPostSettings $settings, TweetContext $context, string $instructions)
-
+    public function __construct(XPostSettings $settings, TweetContext $context, string $instructions, ?XCommunity $community = null)
     {
         $this->settings = $settings;
         $this->context = $context;
         $this->instructions = $instructions;
+        $this->community = $community;
     }
 
     public function handle()
@@ -37,13 +39,28 @@ class GenerateTweetJob implements ShouldQueue
             // Build your prompt as a simple string
             $promptText = "You are {$this->settings->profile_name}. {$this->settings->about_me}\n\n";
             $promptText .= "Personality Traits: {$this->settings->personality}\n\n";
-            $promptText .= "Instructions: Based on the context provided below, generate a professional and engaging tweet that reflects your personality. Keep the tweet within {$this->settings->max_tweet_length} characters.\n\n";
-            $promptText .= "Context:\n{$this->context->context}\n\n";
-            $promptText .= "YOU MUST FORMAT YOUR RESPONSE AS JSON. Respond ONLY with valid JSON in this format:\n";
-            $promptText .= "{\"tweet\": \"Your tweet text here\"}\n\n";
-            $promptText .= "DO NOT include any explanations, formatting, or text outside of the JSON structure.";
-
-            $promptText .= "\n\***Main Prompt : {$this->instructions}";
+            
+            $promptText .= "TASK: Generate a unique, engaging tweet based on the user's request and context below.\n\n";
+            
+            $promptText .= "Context for tweet style/topic:\n{$this->context->context}\n\n";
+            
+            if ($this->community) {
+                $promptText .= "Target Community: '{$this->community->name}'\n";
+                $promptText .= "Community Focus: {$this->community->description}\n";
+                $promptText .= "Make the tweet relevant to this community's interests.\n\n";
+            }
+            
+            $promptText .= "User's Request/Topic: {$this->instructions}\n\n";
+            
+            $promptText .= "INSTRUCTIONS:\n";
+            $promptText .= "- Create a NEW tweet inspired by the user's request, don't copy it exactly\n";
+            $promptText .= "- Make it engaging and reflect your personality\n";
+            $promptText .= "- Keep within {$this->settings->max_tweet_length} characters\n";
+            $promptText .= "- Add relevant hashtags\n";
+            $promptText .= "- Make it unique and valuable to readers\n\n";
+            
+            $promptText .= "FORMAT: Respond ONLY with valid JSON:\n";
+            $promptText .= "{\"tweet\": \"Your generated tweet here\"}";
 
             info('promptText: ' . $promptText);
 
@@ -56,6 +73,7 @@ class GenerateTweetJob implements ShouldQueue
 
             GeneratedTweet::create([
                 'x_post_settings_id' => $this->settings->id,
+                'x_community_id' => $this->community?->id,
                 'content' => $tweetContent,
                 'is_sent' => false
             ]);
@@ -75,6 +93,11 @@ class GenerateTweetJob implements ShouldQueue
      */
     private function extractTweetFromResponse($content)
     {
+        // Remove markdown code blocks if present
+        $content = preg_replace('/```(?:json)?\s*/', '', $content);
+        $content = preg_replace('/```\s*$/', '', $content);
+        $content = trim($content);
+
         // Try direct JSON decode
         $jsonData = json_decode($content, true);
 

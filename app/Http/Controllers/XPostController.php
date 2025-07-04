@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\XPostSettings;
 use App\Models\GeneratedTweet;
 use App\Models\TweetContext;
+use App\Models\XCommunity;
 use App\Jobs\GenerateTweetJob;
 use App\Services\TwitterService;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class XPostController extends Controller
     {
         $settings = XPostSettings::getProfile();
         return Inertia::render('XPost/Index', [
-            'settings' => $settings->load('contexts')
+            'settings' => $settings->load(['contexts', 'communities'])
         ]);
     }
 
@@ -86,10 +87,13 @@ class XPostController extends Controller
         $validated = $request->validate([
             'context_id' => 'required|exists:tweet_contexts,id',
             'instructions' => 'required|string',
+            'community_id' => 'nullable|exists:x_communities,id',
         ]);
 
         $context = TweetContext::find($validated['context_id']);
-        GenerateTweetJob::dispatch($settings, $context, $validated['instructions']);
+        $community = isset($validated['community_id']) ? XCommunity::find($validated['community_id']) : null;
+        
+        GenerateTweetJob::dispatch($settings, $context, $validated['instructions'], $community);
 
         if ($request->wantsJson()) {
             return response()->json(['message' => 'Tweet generation job has been queued.']);
@@ -101,7 +105,7 @@ class XPostController extends Controller
     public function listTweets(Request $request)
     {
         $settings = XPostSettings::getProfile();
-        $tweets = $settings->tweets()->latest()->paginate($request->input('per_page', 10));
+        $tweets = $settings->tweets()->with('community')->latest()->paginate($request->input('per_page', 10));
         return Inertia::render('XPost/Tweets', [
             'tweets' => $tweets,
             'settings' => $settings
@@ -174,5 +178,42 @@ class XPostController extends Controller
         return response()->json([
             'is_queued' => $settings->x_post_job_queued
         ]);
+    }
+
+    public function storeCommunity(Request $request)
+    {
+        $settings = XPostSettings::getProfile();
+
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'community_id' => 'required|string|unique:x_communities,community_id',
+            'description' => 'nullable|string',
+            'is_active' => 'boolean'
+        ]);
+
+        $community = $settings->communities()->create($validated);
+
+        return redirect()->back()->with('success', 'Community added successfully.');
+    }
+
+    public function updateCommunity(Request $request, XCommunity $community)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'community_id' => 'required|string|unique:x_communities,community_id,' . $community->id,
+            'description' => 'nullable|string',
+            'is_active' => 'boolean'
+        ]);
+
+        $community->update($validated);
+
+        return to_route('x-post.index', status: 303)->with('success', 'Community updated successfully.');
+    }
+
+    public function destroyCommunity(XCommunity $community)
+    {
+        $community->delete();
+
+        return to_route('x-post.index', status: 303)->with('success', 'Community deleted successfully.');
     }
 }
