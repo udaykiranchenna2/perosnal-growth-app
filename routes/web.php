@@ -28,6 +28,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // X Post routes
     Route::prefix('x-post')->name('x-post.')->group(function () {
         Route::get('/', [XPostController::class, 'index'])->name('index');
+        Route::get('/settings', [XPostController::class, 'settings'])->name('settings');
         Route::put('/', [XPostController::class, 'update'])->name('update');
         
         // Context management routes
@@ -42,8 +43,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         
         // Tweet management routes
         Route::post('/generate', [XPostController::class, 'generateTweet'])->name('generate');
-        Route::get('/tweets', [XPostController::class, 'listTweets'])->name('tweets');
         Route::post('/tweets/{tweet}/mark-sent', [XPostController::class, 'markAsSent'])->name('tweets.mark-sent');
+        Route::patch('/tweets/{tweet}/toggle-status', [XPostController::class, 'toggleStatus'])->name('tweets.toggle-status');
+        Route::patch('/tweets/{tweet}', [XPostController::class, 'updateTweet'])->name('tweets.update');
         Route::delete('/tweets/{tweet}', [XPostController::class, 'destroy'])->name('tweets.destroy');
         Route::get('/check-generation-status', [XPostController::class, 'checkGenerationStatus'])->name('check-generation-status');
     });

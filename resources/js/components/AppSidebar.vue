@@ -25,8 +25,8 @@ const mainNavItems: NavItem[] = [
         icon:XIcon
         },
         {
-            title:"Tweets",
-            href:"/x-post/tweets",
+            title:"Settings",
+            href:"/x-post/settings",
             icon:XIcon
         }
 ];

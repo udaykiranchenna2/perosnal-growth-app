@@ -24,7 +24,19 @@ class XPostController extends Controller
     public function index()
     {
         $settings = XPostSettings::getProfile();
-        return Inertia::render('XPost/Index', [
+        $tweets = $settings->tweets()->with('community')->latest()->paginate(10);
+
+        return Inertia::render('XPost/Dashboard', [
+            'settings' => $settings->load(['contexts', 'communities']),
+            'tweets' => $tweets
+        ]);
+    }
+
+    public function settings()
+    {
+        $settings = XPostSettings::getProfile();
+
+        return Inertia::render('XPost/Settings', [
             'settings' => $settings->load(['contexts', 'communities'])
         ]);
     }
@@ -42,7 +54,7 @@ class XPostController extends Controller
 
         $settings->update($validated);
 
-        return to_route('x-post.index', status: 303)->with('success', 'Settings updated successfully.');
+        return redirect()->back()->with('success', 'Settings updated successfully.');
     }
 
     public function storeContext(Request $request)
@@ -70,7 +82,7 @@ class XPostController extends Controller
 
         $context->update($validated);
 
-        return to_route('x-post.index', status: 303)->with('success', 'Context updated successfully.');
+        return redirect()->back()->with('success', 'Context updated successfully.');
     }
 
     public function destroyContext(TweetContext $context)
@@ -88,12 +100,32 @@ class XPostController extends Controller
             'context_id' => 'required|exists:tweet_contexts,id',
             'instructions' => 'required|string',
             'community_id' => 'nullable|exists:x_communities,id',
+            'include_hashtags' => 'boolean',
+            'variations' => 'integer|min:1|max:5',
+            'tone' => 'string|in:professional,casual,engaging,educational',
+            'max_emojis' => 'integer|min:0|max:10',
+            'max_lines' => 'integer|min:1|max:5',
+            'writing_style' => 'string|in:normal,thread,question,list,story',
+            'cta_type' => 'string|in:none,engage,share,follow,question'
         ]);
 
         $context = TweetContext::find($validated['context_id']);
         $community = isset($validated['community_id']) ? XCommunity::find($validated['community_id']) : null;
-        
-        GenerateTweetJob::dispatch($settings, $context, $validated['instructions'], $community);
+
+        $options = [
+            'include_hashtags' => $validated['include_hashtags'] ?? true,
+            'variations' => $validated['variations'] ?? 1,
+            'tone' => $validated['tone'] ?? 'professional',
+            'max_emojis' => $validated['max_emojis'] ?? 2,
+            'max_lines' => $validated['max_lines'] ?? 2,
+            'writing_style' => $validated['writing_style'] ?? 'normal',
+            'cta_type' => $validated['cta_type'] ?? 'none'
+        ];
+
+        // Queue multiple jobs for variations
+        for ($i = 0; $i < ($options['variations'] ?? 1); $i++) {
+            GenerateTweetJob::dispatch($settings, $context, $validated['instructions'], $community, $options);
+        }
 
         if ($request->wantsJson()) {
             return response()->json(['message' => 'Tweet generation job has been queued.']);
@@ -115,10 +147,11 @@ class XPostController extends Controller
     public function markAsSent(GeneratedTweet $tweet, TwitterService $twitterService)
     {
         try {
-
+            // Get community ID if tweet has a community
+            $communityId = $tweet->community ? $tweet->community->community_id : null;
 
             // Post the tweet to Twitter
-            $result = $twitterService->postTweet($tweet->content);
+            $result = $twitterService->postTweet($tweet->content, $communityId);
 
             if ($result['success']) {
                 // Update the tweet status
@@ -128,20 +161,20 @@ class XPostController extends Controller
                     'tweet_id' => $result['tweet_id']
                 ]);
 
-                return to_route('x-post.tweets', status: 303)->with('flash',
+                return to_route('x-post.index', status: 303)->with('flash',
                 ['status' => true, 'message' => 'Tweet sent successfully']
             );
             }
 
 
-            return to_route('x-post.tweets', status: 303)->with('error', 'Failed to send tweet.');
+            return to_route('x-post.index', status: 303)->with('error', 'Failed to send tweet.');
         } catch (\Exception $e) {
             Log::error('Failed to post tweet', [
                 'error' => $e->getMessage(),
                 'tweet_id' => $tweet->id
             ]);
 
-            return to_route('x-post.tweets', status: 303)->with( 'flash' , [
+            return to_route('x-post.index', status: 303)->with( 'flash' , [
                 'status' => false,
                 'message' => $e->getMessage()
             ]);
@@ -165,7 +198,7 @@ class XPostController extends Controller
                 'tweet_id' => $tweet->id
             ]);
 
-            return to_route('x-post.tweets', status: 303)->with( 'flash' , [
+            return to_route('x-post.index', status: 303)->with( 'flash' , [
                 'status' => false,
                 'message' => $e->getMessage()
             ]);
@@ -215,5 +248,27 @@ class XPostController extends Controller
         $community->delete();
 
         return to_route('x-post.index', status: 303)->with('success', 'Community deleted successfully.');
+    }
+
+    public function toggleStatus(GeneratedTweet $tweet)
+    {
+        $tweet->update([
+            'is_sent' => !$tweet->is_sent,
+            'sent_at' => !$tweet->is_sent ? now() : null
+        ]);
+
+        $status = $tweet->is_sent ? 'Sent' : 'Draft';
+        return to_route('x-post.index', status: 303)->with('success', "Tweet marked as {$status}.");
+    }
+
+    public function updateTweet(Request $request, GeneratedTweet $tweet)
+    {
+        $validated = $request->validate([
+            'content' => 'required|string|max:800'
+        ]);
+
+        $tweet->update($validated);
+
+        return to_route('x-post.index', status: 303)->with('success', 'Tweet updated successfully.');
     }
 }

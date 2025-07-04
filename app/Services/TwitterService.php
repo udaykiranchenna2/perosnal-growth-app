@@ -58,14 +58,21 @@ class TwitterService
      * Post a tweet to Twitter
      *
      * @param string $content The tweet content
+     * @param string|null $communityId Optional community ID to post to
      * @return array|false Returns array with tweet data on success, false on failure
      */
-    public function postTweet(string $content)
+    public function postTweet(string $content, ?string $communityId = null)
     {
         try {
+            $params = ['text' => $content];
+            
+            // Note: Twitter Communities API posting via API is limited
+            // For now, tweets are posted normally but tracked with community association
+            // Community posting would need to be done manually through Twitter's web interface
+            
             $response = $this->twitteroauth->tweet()->create()
                 ->performRequest(
-                    ['text' => $content],
+                    $params,
                     withHeaders: true
                 );
 
